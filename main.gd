@@ -351,7 +351,7 @@ func _build_hud() -> void:
 	centered(label("NIGHT BROOM", 32, Color(1, 0.7, 0.25), title_box), 26)
 	centered(label("grab candy   dodge bats   survive till dawn", 16, Color(0.95, 0.9, 1), title_box), 62)
 	centered(label("ghosts haunt keys. keycaps show where each key flies NOW. pumpkins free them", 8, Color(0.8, 0.65, 1), title_box), 82)
-	lbl_hint = label("press an arrow key to fly", 16, Color(1, 1, 1), title_box)
+	lbl_hint = label("press any key to fly", 16, Color(1, 1, 1), title_box)
 	centered(lbl_hint, 158)
 	# end
 	end_box = Control.new()
@@ -547,7 +547,7 @@ func _update_play(dt: float) -> void:
 	invuln = max(invuln - dt, 0.0)
 	witch.modulate.a = 0.35 if invuln > 0 and int(invuln * 20) % 2 == 0 else 1.0
 	if is_instance_valid(teach_tip):
-		teach_tip.position = Vector2(clampf(witch.position.x, 70, W - 70), maxf(witch.position.y - 30, 46))
+		teach_tip.position = Vector2(clampf(witch.position.x, 118, W - 40), maxf(witch.position.y - 30, 46))
 	_update_candies(dt)
 	_update_bats(dt)
 	_update_pumpkins(dt)
