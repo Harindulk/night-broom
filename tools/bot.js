@@ -7,7 +7,7 @@ const KN=['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'];
  const res=[];
  for(let r=0;r<runs;r++){
   const p=await b.newPage({viewport:{width:960,height:540}});
-  await p.goto('http://localhost:8765/index.html?bot=1');
+  await p.goto('http://localhost:'+(process.env.PORT||8765)+'/index.html?bot=1');
   await p.waitForFunction(()=>window.nb,null,{timeout:30000});
   await p.mouse.click(480,270); await p.waitForTimeout(800); if(process.env.OUT) await p.screenshot({path:process.env.OUT+'/title.png'}); await p.keyboard.press('ArrowRight');
   const held=new Set(); let st; const shots=(process.env.SHOTS||'').split(',').filter(Boolean).map(Number); const out=process.env.OUT||'.';
