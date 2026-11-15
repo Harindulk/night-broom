@@ -80,6 +80,7 @@ var title_box: Control
 var end_box: Control
 var lbl_end_title: Label
 var lbl_end_score: Label
+var lbl_end_sub: Label
 var lbl_hint: Label
 
 var sfx := {}
@@ -387,6 +388,9 @@ func _build_hud() -> void:
 	centered(lbl_end_title, 50)
 	lbl_end_score = label("", 16, Color(1, 1, 1), end_box)
 	centered(lbl_end_score, 96)
+	lbl_end_score.pivot_offset = Vector2(W / 2, 10)
+	lbl_end_sub = label("", 8, Color(1, 0.75, 0.8), end_box)
+	centered(lbl_end_sub, 122)
 	var again := label("press any key to fly again", 16, Color(0.85, 0.8, 1), end_box)
 	centered(again, 160)
 
@@ -468,7 +472,12 @@ func _end(did_win: bool) -> void:
 		_save_best()
 	lbl_end_title.text = "DAWN!" if did_win else "KNOCKED OFF YOUR BROOM"
 	lbl_end_title.label_settings.font_size = 32 if did_win else 24
-	lbl_end_score.text = "candy %d     best %d" % [candy, best]
+	lbl_end_sub.text = "survived the night with %d heart%s" % [hearts, "" if hearts == 1 else "s"] if did_win else ""
+	lbl_end_score.scale = Vector2.ONE
+	var count := create_tween()  # candy counts up over 0.8 s, then pops
+	count.tween_method(func(v: float): lbl_end_score.text = "candy %d     best %d" % [int(v), best], 0.0, float(candy), 0.8).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	count.tween_property(lbl_end_score, "scale", Vector2(1.3, 1.3), 0.08)
+	count.tween_property(lbl_end_score, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	end_box.visible = true
 	if _dim_tw: _dim_tw.kill()
 	dim_play.color.a = 0.0
