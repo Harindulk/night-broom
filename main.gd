@@ -567,14 +567,14 @@ func _spawn_candy() -> void:
 func _update_bats(dt: float) -> void:
 	bat_timer -= dt
 	if bat_timer <= 0:
-		bat_timer = lerp(2.4, 0.95, t / NIGHT_LEN) * randf_range(0.7, 1.2)
+		bat_timer = lerp(3.5, 2.0, t / NIGHT_LEN) * randf_range(0.7, 1.2)
 		var from_left := randf() < 0.5
 		var s := spr(26, 8, C_BAT, world)
 		s.scale = Vector2(1.3, 1.3)
 		s.flip_h = not from_left
 		var y := randf_range(PLAY_TOP + 8, PLAY_BOTTOM - 4)
 		s.position = Vector2(-12 if from_left else W + 12, y)
-		var sp: float = lerp(70.0, 135.0, t / NIGHT_LEN) * randf_range(0.85, 1.15)
+		var sp: float = lerp(55.0, 90.0, t / NIGHT_LEN) * randf_range(0.85, 1.15)
 		bats.append({"node": s, "vx": sp if from_left else -sp, "y": y, "ph": randf() * TAU, "amp": randf_range(4, 18)})
 	for b in bats.duplicate():
 		b.node.position.x += b.vx * dt
@@ -583,7 +583,7 @@ func _update_bats(dt: float) -> void:
 		if b.node.position.x < -20 or b.node.position.x > W + 20:
 			bats.erase(b)
 			b.node.queue_free()
-		elif invuln <= 0 and b.node.position.distance_to(witch.position) < 12:
+		elif invuln <= 0 and b.node.position.distance_to(witch.position) < 8:
 			_hurt(b)
 		elif invuln <= 0 and not b.has("near") and b.node.position.distance_to(witch.position) < 26:
 			b.near = true
@@ -594,7 +594,7 @@ func _update_bats(dt: float) -> void:
 
 func _hurt(b: Dictionary) -> void:
 	hearts -= 1
-	invuln = 1.6
+	invuln = 2.5
 	vel = (witch.position - b.node.position).normalized() * 220
 	shake = minf(shake + 0.8, 1.0)
 	flash(Color(1, 0.2, 0.25, 0.3), 0.25)
