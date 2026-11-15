@@ -8,7 +8,7 @@ Game design and code: StarFun Games (Harindu Lakshitha).
 
 ## Sound (CC0)
 - [Digital Audio](https://kenney.nl/assets/digital-audio) by Kenney: pickup, pumpkin, haunt, hit, exorcise, dawn and start sounds.
-- [Interface Sounds](https://kenney.nl/assets/interface-sounds) by Kenney: key click, glitch.
+- [Interface Sounds](https://kenney.nl/assets/interface-sounds) by Kenney: key click, glitch, bat whoosh.
 
 ## Music (CC BY 4.0)
 - "Danse Macabre" by Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0. https://creativecommons.org/licenses/by/4.0/
