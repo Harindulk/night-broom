@@ -308,6 +308,7 @@ func _build_hud() -> void:
 
 
 func _build_audio() -> void:
+	AudioServer.add_bus_effect(0, AudioEffectLimiter.new())  # catches rare haunt+music peaks
 	for n in ["pickup", "pumpkin", "haunt", "hit", "exorcise", "dawn", "start", "key", "glitch", "err"]:
 		var p := AudioStreamPlayer.new()
 		var path := "res://assets/sfx/%s.%s" % [n, "ogg" if n in ["key", "glitch", "err"] else "mp3"]
