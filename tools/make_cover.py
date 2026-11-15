@@ -41,8 +41,14 @@ for c, r in [(2,19),(3,20),(4,21),(0,1),(6,20),(2,1),(7,21),(5,19),(8,20),(3,1)]
     x += 16*s + 6
 d.rectangle([0, 375, W, H], fill=(23, 15, 38, 255))
 d.rectangle([0, 375, W, 376], fill=(76, 52, 115, 255))
+def jack(cx, cy, sc):
+    put(img, tile(33, 18, sc, (255, 140, 30), mono), cx, cy)
+    k = (40, 10, 30, 255)  # carved face, matching the in-game jack-o'-lanterns
+    for ex in (-3, 2):
+        d.rectangle([cx + ex*sc, cy - 1*sc, cx + (ex+1)*sc - 1, cy - 1], fill=k)
+    d.rectangle([cx - 3*sc, cy + 2*sc, cx + 3*sc - 1, cy + 3*sc - 1], fill=k)
 for px_ in [60, 250, 470]:
-    put(img, tile(33, 18, 3, (255, 140, 30), mono), px_, 360)
+    jack(px_, 360, 3)
 # actors
 put(img, tile(34, 3, 9, (217, 153, 90), mono, rot=-45), 292, 268)
 put(img, tile(26, 9, 8, (158, 255, 140), mono), 300, 222)
