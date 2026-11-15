@@ -53,6 +53,7 @@ var key_map := [0, 1, 2, 3]  # key index -> direction index
 var key_down := [false, false, false, false]
 var key_caps: Array = []      # [{cap, icon, ghost, haunt_left}]
 var flying_ghosts := 0
+var run_id := 0  # ghosts in flight from an earlier run must not land in this one
 
 var candies: Array = []
 var bats: Array = []
@@ -396,6 +397,9 @@ func _show_title() -> void:
 
 func _start() -> void:
 	state = S.PLAY
+	run_id += 1
+	flying_ghosts = 0
+	_shown_hearts = 3
 	title_box.visible = false
 	end_box.visible = false
 	t = 0.0
@@ -463,7 +467,7 @@ func _end(did_win: bool) -> void:
 
 func _unhandled_input(e: InputEvent) -> void:
 	if e is InputEventKey and e.pressed and not e.echo:
-		if state == S.TITLE and _key_index(e.physical_keycode) >= 0:
+		if state == S.TITLE:
 			_start()
 		elif state == S.END and end_t > 0.8:
 			_start()
@@ -599,14 +603,14 @@ func _spawn_candy() -> void:
 func _update_bats(dt: float) -> void:
 	bat_timer -= dt
 	if bat_timer <= 0:
-		bat_timer = lerp(3.5, 2.0, t / NIGHT_LEN) * randf_range(0.7, 1.2)
+		bat_timer = lerp(3.0, 1.4, t / NIGHT_LEN) * randf_range(0.7, 1.2)
 		var from_left := randf() < 0.5
 		var s := spr(26, 8, C_BAT, world)
 		s.scale = Vector2(1.3, 1.3)
 		s.flip_h = not from_left
 		var y := randf_range(PLAY_TOP + 8, PLAY_BOTTOM - 4)
 		s.position = Vector2(-12 if from_left else W + 12, y)
-		var sp: float = lerp(55.0, 90.0, t / NIGHT_LEN) * randf_range(0.85, 1.15)
+		var sp: float = lerp(60.0, 110.0, t / NIGHT_LEN) * randf_range(0.85, 1.15)
 		bats.append({"node": s, "vx": sp if from_left else -sp, "y": y, "ph": randf() * TAU, "amp": randf_range(4, 18)})
 	for b in bats.duplicate():
 		b.node.position.x += b.vx * dt
@@ -615,7 +619,7 @@ func _update_bats(dt: float) -> void:
 		if b.node.position.x < -20 or b.node.position.x > W + 20:
 			bats.erase(b)
 			b.node.queue_free()
-		elif invuln <= 0 and b.node.position.distance_to(witch.position) < 8:
+		elif invuln <= 0 and b.node.position.distance_to(witch.position) < 10:
 			_hurt(b)
 		elif invuln <= 0 and not b.has("near") and b.node.position.distance_to(witch.position) < 32:
 			b.near = true
@@ -645,12 +649,14 @@ func _hurt(b: Dictionary) -> void:
 
 
 func _update_pumpkins(dt: float) -> void:
-	# a jack-o'-lantern shows up while any key is haunted; grabbing it frees every key
+	# a jack-o'-lantern shows up once the haunting bites (2 keys, or one key for 5 s); grabbing it frees every key
 	var haunted := 0
+	var longest := 0.0
 	for k in 4:
 		if key_caps[k].haunt > 0:
 			haunted += 1
-	if haunted > 0 and pumpkins.is_empty():
+			longest = maxf(longest, key_caps[k].haunt_max - key_caps[k].haunt)
+	if (haunted >= 2 or longest >= 5.0 or not first_pumpkin_done and haunted > 0) and pumpkins.is_empty():
 		pumpkin_timer -= dt
 		if pumpkin_timer <= 0:
 			pumpkin_timer = 7.0
@@ -720,7 +726,7 @@ func _update_pumpkins(dt: float) -> void:
 # ---------- haunting (the prerequisite) ----------
 
 func _max_haunts() -> int:
-	return clampi(1 + int(t / 28.0), 1, 4)
+	return clampi(1 + int(t / 20.0), 1, 4)
 
 
 func _update_haunts(dt: float) -> void:
@@ -749,6 +755,7 @@ func _update_haunts(dt: float) -> void:
 
 func _send_ghost(k: int) -> void:
 	flying_ghosts += 1
+	var my_run := run_id
 	var g := spr(27, 8, C_GHOST, hud)
 	g.z_index = 10
 	g.position = Vector2(randf_range(60, W - 60), -16)
@@ -770,6 +777,8 @@ func _send_ghost(k: int) -> void:
 	tw.parallel().tween_property(g, "scale", Vector2.ONE, d2)
 	tw.tween_callback(func():
 		g.queue_free()
+		if my_run != run_id:
+			return
 		flying_ghosts -= 1
 		if state == S.PLAY:
 			_haunt(k))
