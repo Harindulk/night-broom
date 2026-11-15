@@ -1,0 +1,8 @@
+.godot/
+_dl/
+build/
+notes/
+CLAUDE.md
+.claude/
+*.zip
+.DS_Store

@@ -1,0 +1,6 @@
+{
+  "name": "night-broom-playtest",
+  "private": true,
+  "description": "Playwright bot that plays the web build (serve build/web on :8765, then: node bot.js aware|naive <runs>)",
+  "devDependencies": { "playwright": "1.58.0" }
+}
