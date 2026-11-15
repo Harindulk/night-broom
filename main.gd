@@ -78,6 +78,13 @@ var sfx := {}
 var bot_mode := false  # ?bot=1 on web: publish state for the automated playtest
 var music: AudioStreamPlayer
 var tex_cache := {}
+var flash_rect: ColorRect
+var scenery: Node2D
+var windows: Array = []  # [pos, dawn threshold] village windows that light up at dawn
+var sun: Sprite2D
+var dawn := 0.0
+var ambient: Array = []  # title/end screen drifters
+var ambient_timer := 0.0
 
 
 func _ready() -> void:
@@ -165,7 +172,14 @@ func hitstop(dur: float, scale := 0.05) -> void:
 		Engine.time_scale = 1.0
 
 
+func flash(col: Color, dur := 0.2) -> void:
+	flash_rect.color = col
+	create_tween().tween_property(flash_rect, "color:a", 0.0, dur)
+
+
 func burst(pos: Vector2, col: Color, n: int, speed := 90.0) -> void:
+	if particles.size() > 500:
+		return
 	for i in n:
 		var a := randf() * TAU
 		particles.append({"p": pos, "v": Vector2.from_angle(a) * randf_range(speed * 0.3, speed), "life": randf_range(0.3, 0.7), "max": 0.7, "c": col, "s": randf_range(1.0, 2.5)})
@@ -175,8 +189,10 @@ func popup(text: String, pos: Vector2, col: Color) -> void:
 	var l := label(text, 16, col, world)
 	l.z_index = 6
 	l.position = pos - Vector2(12, 14)
+	l.scale = Vector2(1.6, 1.6)
 	var tw := create_tween()
-	tw.tween_property(l, "position:y", l.position.y - 18, 0.6).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	tw.tween_property(l, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(l, "position:y", l.position.y - 18, 0.6).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 	tw.parallel().tween_property(l, "modulate:a", 0.0, 0.6).set_delay(0.2)
 	tw.tween_callback(l.queue_free)
 
@@ -186,6 +202,11 @@ func popup(text: String, pos: Vector2, col: Color) -> void:
 func _build_scenery() -> void:
 	var layer := Node2D.new()
 	add_child(layer)
+	scenery = layer
+	layer.draw.connect(_draw_windows)
+	sun = spr(27, 11, Color(1.0, 0.85, 0.4), layer, true)
+	sun.scale = Vector2(3, 3)
+	sun.visible = false
 	moon = spr(20, 5, Color(1.0, 0.95, 0.75), layer, true)
 	moon.scale = Vector2(3, 3)
 	# village silhouettes along the horizon
@@ -198,6 +219,7 @@ func _build_scenery() -> void:
 		var sc := 2.0 if h.y > 10 else 1.5
 		s.scale = Vector2(sc, sc)
 		s.position = Vector2(x + 8 * sc, GROUND_Y - 8 * sc)
+		windows.append([s.position + Vector2(randf_range(-5, 3) * sc, randf_range(-2, 4) * sc), randf_range(0.15, 0.95)])
 		x += 16 * sc + randf_range(2, 10)
 		i += 1
 	# porch pumpkins
@@ -233,6 +255,11 @@ func _build_hud() -> void:
 	edge.position = Vector2(0, GROUND_Y)
 	edge.size = Vector2(W, 1)
 	hud.add_child(edge)
+	flash_rect = ColorRect.new()
+	flash_rect.color = Color(1, 1, 1, 0)
+	flash_rect.size = Vector2(W, GROUND_Y)
+	flash_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud.add_child(flash_rect)
 	for k in 4:
 		var cap := Node2D.new()
 		cap.position = KEY_POS[k]
@@ -304,9 +331,9 @@ func _build_hud() -> void:
 
 
 func _build_audio() -> void:
-	for n in ["pickup", "pumpkin", "haunt", "hit", "exorcise", "dawn", "start", "key", "glitch", "err"]:
+	for n in ["pickup", "pumpkin", "haunt", "hit", "exorcise", "dawn", "start", "key", "glitch", "err", "whoosh"]:
 		var p := AudioStreamPlayer.new()
-		var path := "res://assets/sfx/%s.%s" % [n, "ogg" if n in ["key", "glitch", "err"] else "mp3"]
+		var path := "res://assets/sfx/%s.%s" % [n, "ogg" if n in ["key", "glitch", "err", "whoosh"] else "mp3"]
 		p.stream = load(path)
 		add_child(p)
 		sfx[n] = p
@@ -349,6 +376,9 @@ func _start() -> void:
 	haunt_timer = 11.0
 	pumpkin_timer = 4.0
 	first_haunt_done = false
+	for a in ambient:
+		a.node.queue_free()
+	ambient.clear()
 	for i in 3:
 		_spawn_candy()
 	_refresh_hud()
@@ -371,6 +401,7 @@ func _end(did_win: bool) -> void:
 	if did_win:
 		play("dawn")
 		burst(witch.position, Color(1, 0.8, 0.4), 40, 140)
+		flash(Color(1, 0.9, 0.6, 0.6), 0.8)
 	for k in 4:
 		_unhaunt(k, false)
 	for arr in [candies, bats, pumpkins]:
@@ -405,6 +436,12 @@ func _process(dt: float) -> void:
 		end_t += dt
 		witch.position.y += sin(Time.get_ticks_msec() / 300.0) * 0.15
 		lbl_hint.modulate.a = 0.55 + 0.45 * sin(Time.get_ticks_msec() / 220.0)
+		_update_ambient(dt)
+	dawn = clamp((t - (NIGHT_LEN - 20.0)) / 20.0, 0.0, 1.0) if state == S.PLAY or won else 0.0
+	sun.visible = dawn > 0.0
+	sun.position = Vector2(70, GROUND_Y + 24 - dawn * 90)
+	scenery.modulate = Color.WHITE.lerp(Color(1.5, 1.25, 1.1), dawn)
+	scenery.position.x = (W / 2 - witch.position.x) * 0.05  # parallax
 	_update_caps(dt)
 	_update_particles(dt)
 	# trauma shake: quadratic, smooth, self-decaying
@@ -413,6 +450,7 @@ func _process(dt: float) -> void:
 	var ms := Time.get_ticks_msec() / 1000.0 * 30.0
 	cam.offset = Vector2(7 * tr * sin(ms * 1.7), 5 * tr * sin(ms * 2.3))
 	bg.queue_redraw()
+	scenery.queue_redraw()
 	fx.queue_redraw()
 	if bot_mode:
 		_publish_state()
@@ -447,8 +485,9 @@ func _update_play(dt: float) -> void:
 	witch.position.x = clamp(witch.position.x, 10, W - 10)
 	witch.position.y = clamp(witch.position.y, PLAY_TOP, PLAY_BOTTOM)
 	witch.rotation = lerp(witch.rotation, vel.x / 150.0 * 0.35, 10 * dt)
+	witch_body.position.y = -3 + sin(t * 6.0) * 0.8
 	witch_body.flip_h = vel.x < -5 if abs(vel.x) > 5 else witch_body.flip_h
-	if randf() < 0.6:
+	if randf() < 0.6 and particles.size() < 500:
 		particles.append({"p": witch.position + Vector2(-sign(vel.x + 0.01) * 10, 6), "v": -vel * 0.2 + Vector2(0, 10), "life": 0.5, "max": 0.5, "c": Color(0.75, 0.6, 1.0), "s": 1.5})
 	invuln = max(invuln - dt, 0.0)
 	witch.modulate.a = 0.35 if invuln > 0 and int(invuln * 20) % 2 == 0 else 1.0
@@ -464,8 +503,12 @@ func _update_play(dt: float) -> void:
 func _update_candies(dt: float) -> void:
 	combo_t -= dt
 	for c in candies.duplicate():
+		var d: float = c.node.position.distance_to(witch.position)
+		if d < 44:  # magnet
+			c.node.position.x = move_toward(c.node.position.x, witch.position.x, 180 * dt)
+			c.y = move_toward(c.y, witch.position.y, 180 * dt)
 		c.node.position.y = c.y + sin(t * 3 + c.ph) * 3
-		if c.node.position.distance_to(witch.position) < 15:
+		if d < 15:
 			candies.erase(c)
 			combo = combo + 1 if combo_t > 0 else 1
 			combo = mini(combo, 5)
@@ -478,6 +521,11 @@ func _update_candies(dt: float) -> void:
 			c.node.queue_free()
 			_spawn_candy()
 			_refresh_hud()
+			lbl_candy.modulate = Color(1, 0.95, 0.6).lerp(Color(1, 0.5, 0.2), combo / 5.0)
+			lbl_candy.scale = Vector2.ONE * (1.3 + combo * 0.15)
+			var ct := create_tween()
+			ct.tween_property(lbl_candy, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			ct.parallel().tween_property(lbl_candy, "modulate", Color.WHITE, 0.4)
 
 
 func _spawn_candy() -> void:
@@ -516,6 +564,11 @@ func _update_bats(dt: float) -> void:
 			b.node.queue_free()
 		elif invuln <= 0 and b.node.position.distance_to(witch.position) < 12:
 			_hurt(b)
+		elif invuln <= 0 and not b.has("near") and b.node.position.distance_to(witch.position) < 26:
+			b.near = true
+			play("whoosh", randf_range(1.1, 1.4), -8)
+			shake = minf(shake + 0.15, 1.0)
+			burst(witch.position, C_BAT, 4, 50)
 
 
 func _hurt(b: Dictionary) -> void:
@@ -523,6 +576,7 @@ func _hurt(b: Dictionary) -> void:
 	invuln = 1.6
 	vel = (witch.position - b.node.position).normalized() * 220
 	shake = minf(shake + 0.8, 1.0)
+	flash(Color(1, 0.2, 0.25, 0.3), 0.25)
 	play("hit")
 	burst(witch.position, C_BAT, 18, 120)
 	witch_body.modulate = Color(3, 3, 3)
@@ -571,6 +625,8 @@ func _update_pumpkins(dt: float) -> void:
 				hearts += 1
 				popup("+1 life", p.node.position + Vector2(0, -14), Color(1, 0.4, 0.45))
 			shake = minf(shake + 0.45, 1.0)
+			flash(Color(1, 0.6, 0.2, 0.3), 0.3)
+			hitstop(0.07, 0.1)
 			for k in 4:
 				if key_caps[k].haunt > 0:
 					_unhaunt(k, true)
@@ -657,6 +713,9 @@ func _haunt(k: int) -> void:
 	tw3.parallel().tween_property(hl, "modulate:a", 0.0, 0.5).set_delay(0.8)
 	tw3.tween_callback(hl.queue_free)
 	shake = minf(shake + 0.45, 1.0)
+	flash(C_HAUNT * Color(1, 1, 1, 0.2), 0.3)
+	kc.ghost.scale = Vector2(1.5, 0.6)
+	create_tween().tween_property(kc.ghost, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
 	if not first_haunt_done:
 		first_haunt_done = true
 		pumpkin_timer = 1.5
@@ -674,6 +733,13 @@ func _unhaunt(k: int, fx_on: bool) -> void:
 	kc.icon.rotation = DIR_ROT[k]
 	if fx_on and was != k:
 		burst(KEY_POS[k], C_GHOST, 10, 60)
+		var g := spr(27, 8, C_GHOST, hud)  # the ghost visibly flees the key
+		g.z_index = 10
+		g.position = KEY_POS[k] + Vector2(14, -13)
+		var gt := create_tween()
+		gt.tween_property(g, "position", g.position + Vector2(randf_range(-70, 70), -150), 0.7).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		gt.parallel().tween_property(g, "modulate:a", 0.0, 0.7).set_delay(0.2)
+		gt.tween_callback(g.queue_free)
 		var tw := create_tween()
 		tw.tween_property(kc.icon, "rotation", DIR_ROT[k], 0.3).from(DIR_ROT[was]).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
@@ -682,7 +748,7 @@ func _update_caps(dt: float) -> void:
 	for k in 4:
 		var kc: Dictionary = key_caps[k]
 		var target := Vector2(0, 2) if key_down[k] else Vector2.ZERO
-		kc.base.position = kc.base.position.lerp(target, 30 * dt)
+		kc.base.position = kc.base.position.lerp(target, minf(30 * dt, 1.0))  # clamp: a slow frame made caps fly off
 		kc.icon.position = kc.base.position
 		if kc.haunt > 0:
 			kc.ghost.position = Vector2(14, -13 + sin(t * 6 + k) * 2)
@@ -729,7 +795,6 @@ func _draw_fx() -> void:
 
 
 func _draw_bg() -> void:
-	var dawn: float = clamp((t - (NIGHT_LEN - 20.0)) / 20.0, 0.0, 1.0) if state == S.PLAY or won else 0.0
 	var top := Color(0.04, 0.02, 0.1).lerp(Color(0.25, 0.3, 0.6), dawn)
 	var low := Color(0.18, 0.08, 0.3).lerp(Color(1.0, 0.6, 0.4), dawn)
 	var bands := 12
@@ -737,15 +802,50 @@ func _draw_bg() -> void:
 		var y0 := GROUND_Y * i / bands
 		bg.draw_rect(Rect2(0, y0, W, GROUND_Y / bands + 1), top.lerp(low, float(i) / (bands - 1)))
 	var ms := Time.get_ticks_msec() / 1000.0
+	var px := (W / 2 - witch.position.x) * 0.02  # parallax
 	for s in stars:
 		var a: float = (0.5 + 0.5 * sin(ms * 2.0 + s[1])) * s[2] * (1.0 - dawn)
-		bg.draw_rect(Rect2(s[0], Vector2.ONE), Color(1, 1, 0.9, a))
+		bg.draw_rect(Rect2(s[0] + Vector2(px, 0), Vector2.ONE), Color(1, 1, 0.9, a))
 	if state != S.PLAY:
 		moon.position = Vector2(W - 44, 150)
 
 
+func _draw_windows() -> void:
+	if dawn <= 0.0:
+		return
+	for w in windows:
+		if dawn > w[1]:
+			scenery.draw_rect(Rect2(w[0], Vector2(2, 2)), Color(1, 0.85, 0.4, minf((dawn - w[1]) * 8.0, 1.0)))
+
+
+func _update_ambient(dt: float) -> void:
+	ambient_timer -= dt
+	if ambient_timer <= 0 and ambient.size() < 4:
+		ambient_timer = randf_range(1.5, 3.0)
+		var ghost := randf() < 0.6
+		var from_left := randf() < 0.5
+		var s := spr(27 if ghost else 26, 8, C_GHOST if ghost else C_BAT, world)
+		s.modulate.a = 0.7
+		s.flip_h = not from_left
+		s.z_index = 1
+		var y := randf_range(95, 185)
+		s.position = Vector2(-12 if from_left else W + 12, y)
+		if end_t < 2.0:  # first seconds of the title: already on screen
+			s.position.x = randf_range(40, W - 40)
+		var sp := randf_range(18, 30) if ghost else randf_range(45, 70)
+		ambient.append({"node": s, "vx": sp if from_left else -sp, "y": y, "ph": randf() * TAU, "ghost": ghost})
+	for a in ambient.duplicate():
+		a.node.position.x += a.vx * dt
+		a.node.position.y = a.y + sin(end_t * 2 + a.ph) * 6
+		if not a.ghost:
+			a.node.scale.y = 1.0 + sin(end_t * 20 + a.ph) * 0.3
+		if a.node.position.x < -20 or a.node.position.x > W + 20:
+			ambient.erase(a)
+			a.node.queue_free()
+
+
 func _publish_state() -> void:
-	var st := {"state": state, "t": t, "candy": candy, "hearts": hearts, "map": key_map,
+	var st := {"state": state, "t": t, "candy": candy, "hearts": hearts, "map": key_map, "fps": Engine.get_frames_per_second(), "np": particles.size(),
 		"w": [witch.position.x, witch.position.y],
 		"candies": candies.map(func(c): return [c.node.position.x, c.node.position.y]),
 		"bats": bats.map(func(b): return [b.node.position.x, b.node.position.y, b.vx]),
