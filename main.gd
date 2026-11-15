@@ -148,10 +148,14 @@ func centered(l: Label, y: float) -> void:
 	l.size = Vector2(W, 0)
 
 
+# Per-sound gain from an ffmpeg loudness pass: big events ~-15 LUFS momentary, pickup ~-20, key click ~-35, all true peaks <= -1.9 dBTP.
+const SFX_DB := {"hit": 8.0, "haunt": 10.0, "exorcise": 14.0, "dawn": 14.0, "start": 11.0, "pickup": 12.0, "pumpkin": 13.0, "key": -6.0, "glitch": -4.0, "err": -4.0}
+const MUSIC_START := 23.6  # Danse Macabre is ~-36 LUFS until the orchestra enters at 23.65 s
+
 func play(name: String, pitch := 1.0, vol := 0.0) -> void:
 	var p: AudioStreamPlayer = sfx[name]
 	p.pitch_scale = pitch
-	p.volume_db = vol
+	p.volume_db = vol + SFX_DB.get(name, 0.0)
 	p.play()
 
 
@@ -313,9 +317,11 @@ func _build_audio() -> void:
 	music = AudioStreamPlayer.new()
 	var m: AudioStreamMP3 = load("res://assets/music/danse.mp3")
 	m.loop = true
+	m.loop_offset = MUSIC_START
 	music.stream = m
-	music.volume_db = -8
+	music.volume_db = -5
 	add_child(music)
+	music.play(MUSIC_START)  # title music; on web it starts at the first key/click
 
 
 # ---------- state ----------
@@ -354,7 +360,7 @@ func _start() -> void:
 	_refresh_hud()
 	play("start")
 	if not music.playing:
-		music.play()
+		music.play(MUSIC_START)
 
 
 func _end(did_win: bool) -> void:
@@ -425,7 +431,7 @@ func _read_keys() -> void:
 			if Input.is_physical_key_pressed(code):
 				d = true
 		if d and not key_down[k] and state == S.PLAY:
-			play("key", randf_range(0.9, 1.1), -10)
+			play("key", randf_range(0.9, 1.1))
 		key_down[k] = d
 
 
@@ -471,7 +477,7 @@ func _update_candies(dt: float) -> void:
 			combo = mini(combo, 5)
 			combo_t = 2.2
 			candy += combo
-			play("pickup", 0.9 + combo * 0.12, -4)
+			play("pickup", 0.9 + combo * 0.12)
 			burst(c.node.position, c.node.get_meta("col"), 8 + combo * 3, 70 + combo * 15)
 			popup("+%d" % combo, c.node.position, Color(1, 0.95, 0.6).lerp(Color(1, 0.5, 0.2), combo / 5.0))
 			_squash()
@@ -616,7 +622,7 @@ func _send_ghost(k: int) -> void:
 	g.z_index = 10
 	g.position = Vector2(randf_range(60, W - 60), -16)
 	g.scale = Vector2(1.6, 1.6)
-	play("haunt", 1.0, -2)
+	play("haunt")
 	var mid := Vector2(lerp(g.position.x, KEY_POS[k].x, 0.5) + randf_range(-80, 80), 120)
 	var tw := create_tween()
 	tw.tween_property(g, "position", mid, 0.55).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
