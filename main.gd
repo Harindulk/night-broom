@@ -676,7 +676,7 @@ func _update_pumpkins(dt: float) -> void:
 			s.scale = Vector2.ZERO
 			create_tween().tween_property(s, "scale", Vector2(1.5, 1.5), 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 			var tag := label("GRAB! FREES KEYS" if first else "FREES KEYS", 8, Color(1, 0.8, 0.5), world)  # sibling, not child: keeps the 8px font unscaled
-			var toff := Vector2(-34 if first else -22, -24)
+			var toff := Vector2(-34, 14) if first else Vector2(-22, -24)  # first: below the pumpkin, clear of the key tip above the witch
 			tag.position = s.position + toff
 			var ptr: Sprite2D = null
 			if first:
@@ -823,7 +823,7 @@ func _haunt(k: int) -> void:
 	duck.tween_property(music, "volume_db", -5.0, 0.6).set_delay(1.5)
 	burst(KEY_POS[k], C_HAUNT, 14, 70)
 	var hl := label("HAUNTED!", 16, C_HAUNT.lightened(0.3), hud)
-	hl.position = Vector2(clampf(witch.position.x - 34, 4, W - 76), clampf(witch.position.y - 44, 22, PLAY_BOTTOM - 40))
+	hl.position = KEY_POS[k] + Vector2(-34, -64 if k == 0 else -88)  # bottom edge ~185, clear of the village (182-214); off the witch so it never hides her
 	var tw3 := create_tween()
 	tw3.tween_property(hl, "position:y", hl.position.y - 10, 1.2).set_ease(Tween.EASE_OUT)
 	tw3.parallel().tween_property(hl, "modulate:a", 0.0, 0.5).set_delay(0.8)
@@ -880,6 +880,8 @@ func _unhaunt(k: int, fx_on: bool) -> void:
 	kc.bar.visible = false
 	kc.base.modulate = Color(0.85, 0.82, 0.9)
 	kc.icon.rotation = DIR_ROT[k]
+	if is_instance_valid(teach_tip):  # the tip would be wrong once the key is free
+		teach_tip.queue_free()
 	if fx_on and was != k:
 		burst(KEY_POS[k], C_GHOST, 10, 60)
 		var g := spr(27, 8, C_GHOST, hud)  # the ghost visibly flees the key
