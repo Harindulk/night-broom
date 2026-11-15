@@ -222,6 +222,28 @@ func popup(text: String, pos: Vector2, col: Color) -> void:
 	tw.tween_callback(l.queue_free)
 
 
+var _candy_pops := 0  # live "+N" popups, so overlapping ones stack upward instead of on top of each other
+func candy_popup(text: String, pos: Vector2, col: Color, bump: float) -> void:
+	var l := label(text, 16, col, world)
+	l.z_index = 6
+	l.position = (pos - Vector2(12, 14 + 12 * _candy_pops)).clamp(Vector2(4, 24), Vector2(W - 64, PLAY_BOTTOM))
+	_candy_pops += 1
+	l.scale = Vector2(1.6, 1.6)
+	var tw := create_tween()
+	tw.tween_property(l, "scale", Vector2.ONE, 0.2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	# world and HUD share screen coords (camera centred, no zoom), so fly straight to the HUD counter
+	tw.tween_property(l, "position", Vector2(24, 1), 0.45).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.parallel().tween_property(l, "scale", Vector2(0.7, 0.7), 0.45).set_ease(Tween.EASE_IN)
+	tw.tween_callback(func():
+		_candy_pops = maxi(_candy_pops - 1, 0)
+		l.queue_free()
+		lbl_candy.modulate = col
+		lbl_candy.scale = Vector2.ONE * bump
+		var ct := create_tween()
+		ct.tween_property(lbl_candy, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		ct.parallel().tween_property(lbl_candy, "modulate", Color.WHITE, 0.4))
+
+
 # ---------- building ----------
 
 func _build_scenery() -> void:
@@ -577,16 +599,11 @@ func _update_candies(dt: float) -> void:
 			candy += combo
 			play("pickup", 0.9 + combo * 0.12)
 			burst(c.node.position, c.node.get_meta("col"), 8 + combo * 3, 70 + combo * 15)
-			popup("+%d" % combo, c.node.position, Color(1, 0.95, 0.6).lerp(Color(1, 0.5, 0.2), combo / 5.0))
+			candy_popup("+%d" % combo, c.node.position, Color(1, 0.95, 0.6).lerp(Color(1, 0.5, 0.2), combo / 5.0), 1.3 + combo * 0.1)
 			_squash()
 			c.node.queue_free()
 			_spawn_candy()
 			_refresh_hud()
-			lbl_candy.modulate = Color(1, 0.95, 0.6).lerp(Color(1, 0.5, 0.2), combo / 5.0)
-			lbl_candy.scale = Vector2.ONE * (1.3 + combo * 0.15)
-			var ct := create_tween()
-			ct.tween_property(lbl_candy, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-			ct.parallel().tween_property(lbl_candy, "modulate", Color.WHITE, 0.4)
 
 
 func _spawn_candy() -> void:
