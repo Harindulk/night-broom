@@ -213,7 +213,7 @@ func burst(pos: Vector2, col: Color, n: int, speed := 90.0) -> void:
 func popup(text: String, pos: Vector2, col: Color) -> void:
 	var l := label(text, 16, col, world)
 	l.z_index = 6
-	l.position = pos - Vector2(12, 14)
+	l.position = (pos - Vector2(12, 14)).clamp(Vector2(4, 24), Vector2(W - 64, PLAY_BOTTOM))  # keep near-edge popups on screen
 	l.scale = Vector2(1.6, 1.6)
 	var tw := create_tween()
 	tw.tween_property(l, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
@@ -775,9 +775,11 @@ func _send_ghost(k: int) -> void:
 	var mid := Vector2(lerp(g.position.x, KEY_POS[k].x, 0.5) + randf_range(-80, 80), 120)
 	var d1 := 1.1 if first else 0.55
 	var d2 := 0.8 if first else 0.5
+	var trail: Tween = null
 	if first:
 		_dim(0.5, 0.5, 0.0)
-		create_tween().tween_method(func(_v: float):
+		trail = create_tween()
+		trail.tween_method(func(_v: float):
 			if is_instance_valid(g):
 				particles.append({"p": g.position + Vector2(randf_range(-6, 6), randf_range(-6, 6)), "v": Vector2(0, 15), "life": 0.6, "max": 0.6, "c": C_GHOST, "s": 2.0}),
 			0.0, 1.0, d1 + d2)
@@ -786,6 +788,8 @@ func _send_ghost(k: int) -> void:
 	tw.tween_property(g, "position", KEY_POS[k] + Vector2(14, -13), d2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
 	tw.parallel().tween_property(g, "scale", Vector2.ONE, d2)
 	tw.tween_callback(func():
+		if trail:
+			trail.kill()  # stop the trail before its lambda's captured ghost is freed
 		g.queue_free()
 		if my_run != run_id:
 			return
