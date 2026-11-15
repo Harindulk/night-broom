@@ -472,7 +472,8 @@ func _end(did_win: bool) -> void:
 		_save_best()
 	lbl_end_title.text = "DAWN!" if did_win else "KNOCKED OFF YOUR BROOM"
 	lbl_end_title.label_settings.font_size = 32 if did_win else 24
-	lbl_end_sub.text = "survived the night with %d heart%s" % [hearts, "" if hearts == 1 else "s"] if did_win else ""
+	lbl_end_sub.text = "survived the night with %d heart%s" % [hearts, "" if hearts == 1 else "s"] if did_win else "lasted %d of %d seconds. so close to dawn!" % [int(t), int(NIGHT_LEN)] if t > NIGHT_LEN - 30.0 else "lasted %d of %d seconds" % [int(t), int(NIGHT_LEN)]
+	get_tree().call_group("haunt_fx", "hide")
 	lbl_end_score.scale = Vector2.ONE
 	var count := create_tween()  # candy counts up over 0.8 s, then pops
 	count.tween_method(func(v: float): lbl_end_score.text = "candy %d     best %d" % [int(v), best], 0.0, float(candy), 0.8).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
@@ -693,12 +694,17 @@ func _update_pumpkins(dt: float) -> void:
 			var s := pumpkin(world)
 			var first := not first_pumpkin_done
 			first_pumpkin_done = true
-			if first:  # teach: the first pumpkin lands within reach, with an arrow pointing at it
-				var reach: Vector2 = DIRS[key_map[randi() % 4]]  # a direction the haunted keys can still fly
-				s.position = witch.position + reach * 85 + reach.orthogonal() * randf_range(-30, 30)
-			else:
-				s.position = Vector2(randf_range(40, W - 40), randf_range(PLAY_TOP + 20, PLAY_BOTTOM - 20))
-			s.position = s.position.clamp(Vector2(40, PLAY_TOP + 20), Vector2(W - 40, PLAY_BOTTOM - 20))
+			var lo := Vector2(40, PLAY_TOP + 20)
+			var hi := Vector2(W - 40, PLAY_BOTTOM - 20)
+			for i in 12:  # never on top of the witch (a wall clamp could put it there and it self-collects)
+				if first:  # teach: the first pumpkin lands within reach, with an arrow pointing at it
+					var reach: Vector2 = DIRS[key_map[(randi() + i) % 4]]  # a direction the haunted keys can still fly
+					s.position = witch.position + reach * 85 + reach.orthogonal() * randf_range(-30, 30)
+				else:
+					s.position = Vector2(randf_range(lo.x, hi.x), randf_range(lo.y, hi.y))
+				s.position = s.position.clamp(lo, hi)
+				if s.position.distance_to(witch.position) >= 70:
+					break
 			s.scale = Vector2.ZERO
 			create_tween().tween_property(s, "scale", Vector2(1.5, 1.5), 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 			var tag := label("GRAB! FREES KEYS" if first else "FREES KEYS", 8, Color(1, 0.8, 0.5), world)  # sibling, not child: keeps the 8px font unscaled
@@ -853,6 +859,7 @@ func _haunt(k: int) -> void:
 	duck.tween_property(music, "volume_db", -5.0, 0.6).set_delay(1.5)
 	burst(KEY_POS[k], C_HAUNT, 14, 70)
 	var hl := label("HAUNTED!", 16, C_HAUNT.lightened(0.3), hud)
+	hl.add_to_group("haunt_fx")  # hidden by _end so it never lingers on the end screen
 	hl.position = KEY_POS[k] + Vector2(-34, -64 if k == 0 else -88)  # bottom edge ~185, clear of the village (182-214); off the witch so it never hides her
 	var tw3 := create_tween()
 	tw3.tween_property(hl, "position:y", hl.position.y - 10, 1.2).set_ease(Tween.EASE_OUT)
