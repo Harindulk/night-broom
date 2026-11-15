@@ -424,6 +424,7 @@ func _start() -> void:
 	pumpkin_timer = 4.0
 	first_haunt_done = false
 	first_pumpkin_done = false
+	if _dim_tw: _dim_tw.kill()
 	dim_play.color.a = 0.0
 	for a in ambient:
 		a.node.queue_free()
@@ -447,6 +448,7 @@ func _end(did_win: bool) -> void:
 	lbl_end_title.label_settings.font_size = 32 if did_win else 24
 	lbl_end_score.text = "candy %d     best %d" % [candy, best]
 	end_box.visible = true
+	if _dim_tw: _dim_tw.kill()
 	dim_play.color.a = 0.0
 	if did_win:
 		play("dawn")
@@ -537,8 +539,10 @@ func _update_play(dt: float) -> void:
 		vel += input.normalized() * 950.0 * dt
 	vel = vel.limit_length(150.0)
 	witch.position += vel * dt
-	witch.position.x = clamp(witch.position.x, 10, W - 10)
-	witch.position.y = clamp(witch.position.y, PLAY_TOP, PLAY_BOTTOM)
+	var clamped := witch.position.clamp(Vector2(10, PLAY_TOP), Vector2(W - 10, PLAY_BOTTOM))
+	if clamped.x != witch.position.x: vel.x = 0.0
+	if clamped.y != witch.position.y: vel.y = 0.0
+	witch.position = clamped
 	witch.rotation = lerp(witch.rotation, vel.x / 150.0 * 0.35, 10 * dt)
 	witch_body.position.y = -3 + sin(t * 6.0) * 0.8
 	witch_body.flip_h = vel.x < -5 if abs(vel.x) > 5 else witch_body.flip_h
@@ -680,6 +684,11 @@ func _update_pumpkins(dt: float) -> void:
 				ptr.z_index = 4
 				ptr.scale = Vector2(1.6, 1.6)
 			pumpkins.append({"node": s, "life": 12.0 if first else 9.0, "ptr": ptr, "tag": tag, "toff": toff})
+			for k in 4:  # tie the pumpkin to the keys it frees
+				if key_caps[k].haunt > 0:
+					var ct := create_tween()
+					ct.tween_property(key_caps[k].cap, "scale", Vector2(1.6, 1.6), 0.1)
+					ct.tween_property(key_caps[k].cap, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	for p in pumpkins.duplicate():
 		p.life -= dt
 		p.node.rotation = sin(t * 5) * 0.15
@@ -713,6 +722,7 @@ func _update_pumpkins(dt: float) -> void:
 			for k in 4:
 				if key_caps[k].haunt > 0:
 					_unhaunt(k, true)
+			haunt_timer = maxf(haunt_timer, 7.0 if t < 30.0 else 4.0)
 			p.node.queue_free()
 			_refresh_hud()
 		elif p.life <= 0:
@@ -766,7 +776,7 @@ func _send_ghost(k: int) -> void:
 	var d1 := 1.1 if first else 0.55
 	var d2 := 0.8 if first else 0.5
 	if first:
-		create_tween().tween_property(dim_play, "color:a", 0.5, 0.5)
+		_dim(0.5, 0.5, 0.0)
 		create_tween().tween_method(func(_v: float):
 			if is_instance_valid(g):
 				particles.append({"p": g.position + Vector2(randf_range(-6, 6), randf_range(-6, 6)), "v": Vector2(0, 15), "life": 0.6, "max": 0.6, "c": C_GHOST, "s": 2.0}),
@@ -808,23 +818,36 @@ func _haunt(k: int) -> void:
 	tw2.tween_property(kc.cap, "scale", Vector2(1.9, 1.9), 0.12).set_ease(Tween.EASE_OUT)
 	tw2.tween_property(kc.cap, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
 	play("glitch", 0.8)
+	var duck := create_tween().set_ignore_time_scale(true)
+	duck.tween_property(music, "volume_db", -13.0, 0.08)
+	duck.tween_property(music, "volume_db", -5.0, 0.6).set_delay(1.5)
 	burst(KEY_POS[k], C_HAUNT, 14, 70)
 	var hl := label("HAUNTED!", 16, C_HAUNT.lightened(0.3), hud)
-	hl.position = KEY_POS[k] + Vector2(-34, -64 if k == 0 else -88)  # bottom edge ~185, clear of the village (182-214)
+	hl.position = Vector2(clampf(witch.position.x - 34, 4, W - 76), clampf(witch.position.y - 44, 22, PLAY_BOTTOM - 40))
 	var tw3 := create_tween()
 	tw3.tween_property(hl, "position:y", hl.position.y - 10, 1.2).set_ease(Tween.EASE_OUT)
 	tw3.parallel().tween_property(hl, "modulate:a", 0.0, 0.5).set_delay(0.8)
 	tw3.tween_callback(hl.queue_free)
 	shake = minf(shake + 0.45, 1.0)
 	flash(C_HAUNT * Color(1, 1, 1, 0.2), 0.3)
+	if first_haunt_done:
+		hitstop(0.06)
 	kc.ghost.scale = Vector2(1.5, 0.6)
-	create_tween().tween_property(kc.ghost, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	create_tween().tween_property(kc.ghost, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	if not first_haunt_done:
 		first_haunt_done = true
 		pumpkin_timer = 1.5
 		hitstop(1.4, 0.25)  # teach: slow time the first time a key gets possessed
-		create_tween().set_ignore_time_scale(true).tween_property(dim_play, "color:a", 0.0, 0.6).set_delay(2.2)
+		_dim(0.0, 0.6, 2.2)
 		_teach_tip(k, nd)
+
+
+var _dim_tw: Tween
+func _dim(a: float, dur: float, delay: float) -> void:
+	if _dim_tw:
+		_dim_tw.kill()
+	_dim_tw = create_tween().set_ignore_time_scale(true)
+	_dim_tw.tween_property(dim_play, "color:a", a, dur).set_delay(delay)
 
 
 func _teach_tip(k: int, nd: int) -> void:
