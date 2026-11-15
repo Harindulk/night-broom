@@ -498,14 +498,14 @@ func _spawn_candy() -> void:
 func _update_bats(dt: float) -> void:
 	bat_timer -= dt
 	if bat_timer <= 0:
-		bat_timer = lerp(2.4, 0.95, t / NIGHT_LEN) * randf_range(0.7, 1.2)
+		bat_timer = lerp(3.5, 2.0, t / NIGHT_LEN) * randf_range(0.7, 1.2)
 		var from_left := randf() < 0.5
 		var s := spr(26, 8, C_BAT, world)
 		s.scale = Vector2(1.3, 1.3)
 		s.flip_h = not from_left
 		var y := randf_range(PLAY_TOP + 8, PLAY_BOTTOM - 4)
 		s.position = Vector2(-12 if from_left else W + 12, y)
-		var sp: float = lerp(70.0, 135.0, t / NIGHT_LEN) * randf_range(0.85, 1.15)
+		var sp: float = lerp(55.0, 90.0, t / NIGHT_LEN) * randf_range(0.85, 1.15)
 		bats.append({"node": s, "vx": sp if from_left else -sp, "y": y, "ph": randf() * TAU, "amp": randf_range(4, 18)})
 	for b in bats.duplicate():
 		b.node.position.x += b.vx * dt
@@ -514,13 +514,13 @@ func _update_bats(dt: float) -> void:
 		if b.node.position.x < -20 or b.node.position.x > W + 20:
 			bats.erase(b)
 			b.node.queue_free()
-		elif invuln <= 0 and b.node.position.distance_to(witch.position) < 12:
+		elif invuln <= 0 and b.node.position.distance_to(witch.position) < 8:
 			_hurt(b)
 
 
 func _hurt(b: Dictionary) -> void:
 	hearts -= 1
-	invuln = 1.6
+	invuln = 2.5
 	vel = (witch.position - b.node.position).normalized() * 220
 	shake = minf(shake + 0.8, 1.0)
 	play("hit")
@@ -546,7 +546,7 @@ func _update_pumpkins(dt: float) -> void:
 	if haunted > 0 and pumpkins.is_empty():
 		pumpkin_timer -= dt
 		if pumpkin_timer <= 0:
-			pumpkin_timer = 7.0
+			pumpkin_timer = 3.5
 			var s := spr(33, 18, C_PUMPKIN, world, true)
 			s.position = Vector2(randf_range(40, W - 40), randf_range(PLAY_TOP + 20, PLAY_BOTTOM - 20))
 			s.scale = Vector2.ZERO
@@ -554,7 +554,7 @@ func _update_pumpkins(dt: float) -> void:
 			var tag := label("FREES KEYS", 8, Color(1, 0.8, 0.5), s)
 			tag.position = Vector2(-22, 8)
 			tag.scale = Vector2(0.72, 0.72)
-			pumpkins.append({"node": s, "life": 9.0})
+			pumpkins.append({"node": s, "life": 11.0})
 	for p in pumpkins.duplicate():
 		p.life -= dt
 		p.node.rotation = sin(t * 5) * 0.15
@@ -584,7 +584,7 @@ func _update_pumpkins(dt: float) -> void:
 # ---------- haunting (the prerequisite) ----------
 
 func _max_haunts() -> int:
-	return clampi(1 + int(t / 28.0), 1, 4)
+	return clampi(1 + int(t / 40.0), 1, 4)
 
 
 func _update_haunts(dt: float) -> void:
@@ -594,7 +594,7 @@ func _update_haunts(dt: float) -> void:
 		if key_caps[k].haunt > 0:
 			active += 1
 	if haunt_timer <= 0 and active < _max_haunts():
-		haunt_timer = lerp(9.0, 4.5, t / NIGHT_LEN)
+		haunt_timer = lerp(11.0, 6.5, t / NIGHT_LEN)
 		var free_keys := []
 		for k in 4:
 			if key_caps[k].haunt <= 0:
