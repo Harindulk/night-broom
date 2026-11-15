@@ -210,13 +210,13 @@ func burst(pos: Vector2, col: Color, n: int, speed := 90.0) -> void:
 		particles.append({"p": pos, "v": Vector2.from_angle(a) * randf_range(speed * 0.3, speed), "life": randf_range(0.3, 0.7), "max": 0.7, "c": col, "s": randf_range(1.0, 2.5)})
 
 
-func popup(text: String, pos: Vector2, col: Color) -> void:
+func popup(text: String, pos: Vector2, col: Color, size := 1.0) -> void:
 	var l := label(text, 16, col, world)
 	l.z_index = 6
 	l.position = (pos - Vector2(12, 14)).clamp(Vector2(4, 24), Vector2(W - 64, PLAY_BOTTOM))  # keep near-edge popups on screen
-	l.scale = Vector2(1.6, 1.6)
+	l.scale = Vector2(1.6, 1.6) * size
 	var tw := create_tween()
-	tw.tween_property(l, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(l, "scale", Vector2.ONE * size, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tw.parallel().tween_property(l, "position:y", l.position.y - 18, 0.6).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
 	tw.parallel().tween_property(l, "modulate:a", 0.0, 0.6).set_delay(0.2)
 	tw.tween_callback(l.queue_free)
@@ -732,7 +732,7 @@ func _update_pumpkins(dt: float) -> void:
 			candy += 3
 			if hearts < 3:
 				hearts += 1
-				popup("+1 life", p.node.position + Vector2(0, -14), Color(1, 0.4, 0.45))
+				popup("+1 LIFE", p.node.position + Vector2(-8, -22), Color(1, 0.4, 0.45), 1.5)
 			shake = minf(shake + 0.45, 1.0)
 			flash(Color(1, 0.6, 0.2, 0.3), 0.3)
 			hitstop(0.07, 0.1)
