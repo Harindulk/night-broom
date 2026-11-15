@@ -3,8 +3,8 @@ extends Node2D
 
 const W := 480.0
 const H := 270.0
-const PLAY_TOP := 34.0
-const PLAY_BOTTOM := 200.0
+const PLAY_TOP := 40.0
+const PLAY_BOTTOM := 194.0
 const GROUND_Y := 214.0
 const NIGHT_LEN := 120.0
 const TILES := preload("res://assets/sprites/tiles.png")
@@ -24,6 +24,9 @@ const C_BAT := Color(1.0, 0.42, 0.5)
 const C_GHOST := Color(0.75, 0.95, 1.0)
 const C_HAUNT := Color(0.72, 0.45, 1.0)
 const C_PUMPKIN := Color(1.0, 0.55, 0.12)
+const C_FACE := Color(0.12, 0.03, 0.1)
+const PUMPKIN_FACE := [Rect2(-3, -1, 2, 2), Rect2(1, -1, 2, 2), Rect2(-3, 2, 1, 1), Rect2(2, 2, 1, 1), Rect2(-2, 3, 1, 1), Rect2(0, 3, 2, 1)]  # eyes, grin corners, teeth gap
+const PUMPKIN_STEM := [Rect2(0, -6, 2, 1), Rect2(0, -5, 3, 1), Rect2(0, -4, 1, 1)]
 const C_CANDY := [Color(1, 0.8, 0.2), Color(0.35, 0.75, 1), Color(1, 0.3, 0.35)]
 
 enum S { TITLE, PLAY, END }
@@ -86,6 +89,7 @@ var flash_rect: ColorRect
 var scenery: Node2D
 var windows: Array = []  # [pos, dawn threshold] village windows that light up at dawn
 var sun: Sprite2D
+var candles: Array = []
 var dawn := 0.0
 var ambient: Array = []  # title/end screen drifters
 var ambient_timer := 0.0
@@ -136,6 +140,18 @@ func spr(c: int, r: int, col: Color, parent: Node, mono := false) -> Sprite2D:
 	s.texture = tile(c, r, mono)
 	s.modulate = col
 	parent.add_child(s)
+	return s
+
+
+func pumpkin(parent: Node) -> Sprite2D:
+	var s := spr(33, 18, C_PUMPKIN, parent, true)
+	var face := Node2D.new()
+	face.draw.connect(func():
+		for r in PUMPKIN_FACE:
+			face.draw_rect(r, C_FACE)
+		for r in PUMPKIN_STEM:
+			face.draw_rect(r, Color(0.3, 0.55, 0.2)))
+	s.add_child(face)
 	return s
 
 
@@ -217,24 +233,34 @@ func _build_scenery() -> void:
 	sun.visible = false
 	moon = spr(20, 5, Color(1.0, 0.95, 0.75), layer, true)
 	moon.scale = Vector2(3, 3)
-	# village silhouettes along the horizon
+	# cobwebs in the top corners (no parallax: they hang on the "glass")
+	for side in [-1, 1]:
+		var web := spr(2, 15, Color(0.6, 0.55, 0.78, 0.55), bg)
+		web.position = Vector2(10 if side < 0 else W - 10, 30)
+		web.scale = Vector2(2, 2)
+		web.flip_h = side > 0
+	# village silhouettes along the horizon: [col, row, scale]; row < 19 = graveyard prop (no window)
 	var x := 6.0
-	var houses := [Vector2i(2, 19), Vector2i(3, 20), Vector2i(4, 21), Vector2i(0, 1), Vector2i(6, 20), Vector2i(2, 1), Vector2i(7, 21), Vector2i(5, 19), Vector2i(8, 20), Vector2i(3, 1), Vector2i(1, 21), Vector2i(9, 19)]
+	var props := [[2, 20, 2], [0, 14, 1], [1, 14, 1], [6, 2, 2], [4, 21, 2], [6, 20, 2], [0, 14, 1], [0, 14, 1], [6, 2, 2], [7, 21, 2], [8, 20, 2], [1, 14, 1], [0, 14, 1], [6, 2, 2], [1, 21, 2], [2, 21, 2]]
 	var i := 0
 	while x < W:
-		var h: Vector2i = houses[i % houses.size()]
-		var s := spr(h.x, h.y, Color(0.2, 0.14, 0.32), layer)
-		var sc := 2.0 if h.y > 10 else 1.5
+		var h: Array = props[i % props.size()]
+		var sc: float = h[2]
+		var s := spr(h[0], h[1], Color(0.32, 0.22, 0.5), layer)
 		s.scale = Vector2(sc, sc)
 		s.position = Vector2(x + 8 * sc, GROUND_Y - 8 * sc)
-		windows.append([s.position + Vector2(randf_range(-5, 3) * sc, randf_range(-2, 4) * sc), randf_range(0.15, 0.95)])
+		if h[1] >= 19:
+			windows.append([s.position + Vector2(randf_range(-5, 3) * sc, randf_range(-2, 4) * sc), randf_range(0.15, 0.95)])
+			if i % 5 == 0:
+				var c := spr(4, 15, Color(1, 0.85, 0.4), layer)
+				c.position = s.position + Vector2(0, -8 * sc - 5)
+				candles.append(c)
 		x += 16 * sc + randf_range(2, 10)
 		i += 1
 	# porch pumpkins
 	for px in [70.0, 180.0, 330.0, 420.0]:
-		var p := spr(33, 18, C_PUMPKIN, layer, true)
+		var p := pumpkin(layer)
 		p.position = Vector2(px, GROUND_Y - 6)
-		p.scale = Vector2(0.75, 0.75)
 
 
 func _build_witch() -> void:
@@ -248,7 +274,7 @@ func _build_witch() -> void:
 	broom.scale = Vector2(1.2, 0.9)
 	witch_body = spr(26, 9, C_WITCH, witch, true)
 	witch_body.position = Vector2(0, -3)
-	witch.scale = Vector2(1.5, 1.5)
+	witch.scale = Vector2(2, 2)
 
 
 func _build_hud() -> void:
@@ -332,8 +358,7 @@ func _build_hud() -> void:
 	hud.add_child(end_box)
 	var dim := ColorRect.new()
 	dim.color = Color(0.03, 0.01, 0.08, 0.55)
-	dim.position = Vector2(0, 30)
-	dim.size = Vector2(W, 160)
+	dim.size = Vector2(W, GROUND_Y)
 	end_box.add_child(dim)
 	lbl_end_title = label("", 32, Color(1, 0.7, 0.25), end_box)
 	centered(lbl_end_title, 50)
@@ -387,6 +412,8 @@ func _start() -> void:
 	for arr in [candies, bats, pumpkins]:
 		for e in arr:
 			e.node.queue_free()
+			if e.has("tag"):
+				e.tag.queue_free()
 		arr.clear()
 	bat_timer = 2.5
 	haunt_timer = 8.5  # first ghost launches ~8.5 s in (if no bat is near), lands ~10.5 s
@@ -427,6 +454,8 @@ func _end(did_win: bool) -> void:
 		for e in arr:
 			burst(e.node.position, Color(0.8, 0.7, 1.0), 5, 50)
 			e.node.queue_free()
+			if e.has("tag"):
+				e.tag.queue_free()
 		arr.clear()
 
 
@@ -458,6 +487,9 @@ func _process(dt: float) -> void:
 		_update_ambient(dt)
 	dawn = clamp((t - (NIGHT_LEN - 20.0)) / 20.0, 0.0, 1.0) if state == S.PLAY or won else 0.0
 	sun.visible = dawn > 0.0
+	moon.modulate.a = 1.0 - dawn
+	for c in candles:
+		c.modulate.a = 0.7 + 0.3 * sin(Time.get_ticks_msec() / 90.0 + c.position.x)
 	sun.position = Vector2(70, GROUND_Y + 24 - dawn * 90)
 	scenery.modulate = Color.WHITE.lerp(Color(1.5, 1.25, 1.1), dawn)
 	scenery.position.x = (W / 2 - witch.position.x) * 0.05  # parallax
@@ -525,11 +557,11 @@ func _update_candies(dt: float) -> void:
 	combo_t -= dt
 	for c in candies.duplicate():
 		var d: float = c.node.position.distance_to(witch.position)
-		if d < 44:  # magnet
+		if d < 56:  # magnet
 			c.node.position.x = move_toward(c.node.position.x, witch.position.x, 180 * dt)
 			c.y = move_toward(c.y, witch.position.y, 180 * dt)
 		c.node.position.y = c.y + sin(t * 3 + c.ph) * 3
-		if d < 15:
+		if d < 20:
 			candies.erase(c)
 			combo = combo + 1 if combo_t > 0 else 1
 			combo = mini(combo, 5)
@@ -585,7 +617,7 @@ func _update_bats(dt: float) -> void:
 			b.node.queue_free()
 		elif invuln <= 0 and b.node.position.distance_to(witch.position) < 12:
 			_hurt(b)
-		elif invuln <= 0 and not b.has("near") and b.node.position.distance_to(witch.position) < 26:
+		elif invuln <= 0 and not b.has("near") and b.node.position.distance_to(witch.position) < 32:
 			b.near = true
 			play("whoosh", randf_range(1.1, 1.4), -8)
 			shake = minf(shake + 0.15, 1.0)
@@ -622,7 +654,7 @@ func _update_pumpkins(dt: float) -> void:
 		pumpkin_timer -= dt
 		if pumpkin_timer <= 0:
 			pumpkin_timer = 7.0
-			var s := spr(33, 18, C_PUMPKIN, world, true)
+			var s := pumpkin(world)
 			var first := not first_pumpkin_done
 			first_pumpkin_done = true
 			if first:  # teach: the first pumpkin lands within reach, with an arrow pointing at it
@@ -632,34 +664,36 @@ func _update_pumpkins(dt: float) -> void:
 				s.position = Vector2(randf_range(40, W - 40), randf_range(PLAY_TOP + 20, PLAY_BOTTOM - 20))
 			s.position = s.position.clamp(Vector2(40, PLAY_TOP + 20), Vector2(W - 40, PLAY_BOTTOM - 20))
 			s.scale = Vector2.ZERO
-			create_tween().tween_property(s, "scale", Vector2(1.4, 1.4), 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-			var tag := label("GRAB! FREES KEYS" if first else "FREES KEYS", 8, Color(1, 0.8, 0.5), s)
-			tag.position = Vector2(-34 if first else -22, -21)
-			tag.scale = Vector2(1, 1) if first else Vector2(0.72, 0.72)
+			create_tween().tween_property(s, "scale", Vector2(1.5, 1.5), 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			var tag := label("GRAB! FREES KEYS" if first else "FREES KEYS", 8, Color(1, 0.8, 0.5), world)  # sibling, not child: keeps the 8px font unscaled
+			var toff := Vector2(-34 if first else -22, -24)
+			tag.position = s.position + toff
 			var ptr: Sprite2D = null
 			if first:
 				ptr = spr(28, 21, C_PUMPKIN, world, true)
 				ptr.z_index = 4
 				ptr.scale = Vector2(1.6, 1.6)
-			pumpkins.append({"node": s, "life": 12.0 if first else 9.0, "ptr": ptr})
+			pumpkins.append({"node": s, "life": 12.0 if first else 9.0, "ptr": ptr, "tag": tag, "toff": toff})
 	for p in pumpkins.duplicate():
 		p.life -= dt
 		p.node.rotation = sin(t * 5) * 0.15
 		p.node.modulate = C_PUMPKIN.lightened(0.25 + 0.25 * sin(t * 8))
 		if p.life < 2.0:
 			p.node.visible = int(p.life * 10) % 2 == 0
+		p.tag.position = p.node.position + p.toff
 		var to_p: Vector2 = p.node.position - witch.position
 		if randf() < 0.35:  # sparkle: reads as "pick me up"
 			particles.append({"p": p.node.position + Vector2(randf_range(-11, 11), randf_range(-11, 11)), "v": Vector2(0, -25), "life": 0.5, "max": 0.5, "c": Color(1, 0.95, 0.6), "s": 1.5})
-		if to_p.length() < 55:  # gentle pull toward the witch
+		if to_p.length() < 64:  # gentle pull toward the witch
 			p.node.position = p.node.position.move_toward(witch.position, 50 * dt)
 		if p.ptr:
 			p.ptr.position = witch.position + to_p.normalized() * (26 + sin(t * 8) * 3)
 			p.ptr.rotation = to_p.angle() + PI / 2
-		if to_p.length() < 15:
+		if to_p.length() < 20:
 			pumpkins.erase(p)
 			if p.ptr:
 				p.ptr.queue_free()
+			p.tag.queue_free()
 			play("exorcise")
 			burst(p.node.position, C_PUMPKIN, 26, 130)
 			popup("+3", p.node.position, C_PUMPKIN)
@@ -679,6 +713,7 @@ func _update_pumpkins(dt: float) -> void:
 			pumpkins.erase(p)
 			if p.ptr:
 				p.ptr.queue_free()
+			p.tag.queue_free()
 			p.node.queue_free()
 
 
@@ -766,7 +801,7 @@ func _haunt(k: int) -> void:
 	play("glitch", 0.8)
 	burst(KEY_POS[k], C_HAUNT, 14, 70)
 	var hl := label("HAUNTED!", 16, C_HAUNT.lightened(0.3), hud)
-	hl.position = KEY_POS[k] + Vector2(-34, -40 if k == 0 else -64)
+	hl.position = KEY_POS[k] + Vector2(-34, -64 if k == 0 else -88)  # bottom edge ~185, clear of the village (182-214)
 	var tw3 := create_tween()
 	tw3.tween_property(hl, "position:y", hl.position.y - 10, 1.2).set_ease(Tween.EASE_OUT)
 	tw3.parallel().tween_property(hl, "modulate:a", 0.0, 0.5).set_delay(0.8)
