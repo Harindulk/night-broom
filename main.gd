@@ -160,7 +160,7 @@ func centered(l: Label, y: float) -> void:
 
 
 # Per-sound gain from an ffmpeg loudness pass: big events ~-15 LUFS momentary, pickup ~-20, key click ~-35, all true peaks <= -1.9 dBTP.
-const SFX_DB := {"hit": 8.0, "haunt": 10.0, "exorcise": 14.0, "dawn": 14.0, "start": 11.0, "pickup": 12.0, "pumpkin": 13.0, "key": -6.0, "glitch": -4.0, "err": -4.0}
+const SFX_DB := {"hit": 2.5, "haunt": -0.5, "exorcise": -2.0, "dawn": 14.0, "start": 5.5, "pickup": 12.0, "pumpkin": 13.0, "key": -6.0, "glitch": -4.0, "err": -4.0}
 const MUSIC_START := 23.6  # Danse Macabre is ~-36 LUFS until the orchestra enters at 23.65 s
 
 func play(name: String, pitch := 1.0, vol := 0.0) -> void:
