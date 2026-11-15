@@ -15,6 +15,7 @@ const DIRS := [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]
 const DIR_ROT := [0.0, PI, -PI / 2, PI / 2]
 const KEYS := [[KEY_UP, KEY_W], [KEY_DOWN, KEY_S], [KEY_LEFT, KEY_A], [KEY_RIGHT, KEY_D]]
 const OPPOSITE := [1, 0, 3, 2]
+const KEY_NAMES := ["UP", "DOWN", "LEFT", "RIGHT"]
 # inverted-T keycap layout, screen space
 const KEY_POS := [Vector2(240, 228), Vector2(240, 252), Vector2(215, 252), Vector2(265, 252)]
 
@@ -57,9 +58,12 @@ var particles: Array = []
 var stars: Array = []
 
 var bat_timer := 2.0
-var haunt_timer := 11.0
+var haunt_timer := 8.5
 var pumpkin_timer := 4.0
 var first_haunt_done := false
+var first_pumpkin_done := false
+var teach_tip: Node2D      # one-time "UP key now flies ⬇" pop by the witch
+var dim_play: ColorRect    # spotlight: dims the sky while the first ghost takes a key
 var shake := 0.0
 var combo := 0
 var combo_t := 0.0
@@ -222,6 +226,11 @@ func _build_witch() -> void:
 
 
 func _build_hud() -> void:
+	dim_play = ColorRect.new()
+	dim_play.color = Color(0, 0, 0, 0)
+	dim_play.size = Vector2(W, GROUND_Y)
+	dim_play.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud.add_child(dim_play)
 	# ground strip that holds the keyboard
 	var ground := ColorRect.new()
 	ground.color = Color(0.09, 0.06, 0.15)
@@ -283,7 +292,7 @@ func _build_hud() -> void:
 	hud.add_child(title_box)
 	centered(label("NIGHT BROOM", 32, Color(1, 0.7, 0.25), title_box), 26)
 	centered(label("grab candy   dodge bats   survive till dawn", 16, Color(0.95, 0.9, 1), title_box), 62)
-	centered(label("ghosts will haunt your keys. the keycaps below show where each key flies you NOW", 8, Color(0.8, 0.65, 1), title_box), 82)
+	centered(label("ghosts haunt keys. keycaps show where each key flies NOW. pumpkins free them", 8, Color(0.8, 0.65, 1), title_box), 82)
 	lbl_hint = label("press an arrow key to fly", 16, Color(1, 1, 1), title_box)
 	centered(lbl_hint, 158)
 	# end
@@ -346,9 +355,11 @@ func _start() -> void:
 			e.node.queue_free()
 		arr.clear()
 	bat_timer = 2.5
-	haunt_timer = 11.0
+	haunt_timer = 8.5  # first ghost launches ~8.5 s in (if no bat is near), lands ~10.5 s
 	pumpkin_timer = 4.0
 	first_haunt_done = false
+	first_pumpkin_done = false
+	dim_play.color.a = 0.0
 	for i in 3:
 		_spawn_candy()
 	_refresh_hud()
@@ -368,6 +379,7 @@ func _end(did_win: bool) -> void:
 	lbl_end_title.label_settings.font_size = 32 if did_win else 24
 	lbl_end_score.text = "candy %d     best %d" % [candy, best]
 	end_box.visible = true
+	dim_play.color.a = 0.0
 	if did_win:
 		play("dawn")
 		burst(witch.position, Color(1, 0.8, 0.4), 40, 140)
@@ -452,6 +464,8 @@ func _update_play(dt: float) -> void:
 		particles.append({"p": witch.position + Vector2(-sign(vel.x + 0.01) * 10, 6), "v": -vel * 0.2 + Vector2(0, 10), "life": 0.5, "max": 0.5, "c": Color(0.75, 0.6, 1.0), "s": 1.5})
 	invuln = max(invuln - dt, 0.0)
 	witch.modulate.a = 0.35 if invuln > 0 and int(invuln * 20) % 2 == 0 else 1.0
+	if is_instance_valid(teach_tip):
+		teach_tip.position = Vector2(clampf(witch.position.x, 70, W - 70), maxf(witch.position.y - 30, 46))
 	_update_candies(dt)
 	_update_bats(dt)
 	_update_pumpkins(dt)
@@ -548,21 +562,43 @@ func _update_pumpkins(dt: float) -> void:
 		if pumpkin_timer <= 0:
 			pumpkin_timer = 7.0
 			var s := spr(33, 18, C_PUMPKIN, world, true)
-			s.position = Vector2(randf_range(40, W - 40), randf_range(PLAY_TOP + 20, PLAY_BOTTOM - 20))
+			var first := not first_pumpkin_done
+			first_pumpkin_done = true
+			if first:  # teach: the first pumpkin lands within reach, with an arrow pointing at it
+				var reach: Vector2 = DIRS[key_map[randi() % 4]]  # a direction the haunted keys can still fly
+				s.position = witch.position + reach * 85 + reach.orthogonal() * randf_range(-30, 30)
+			else:
+				s.position = Vector2(randf_range(40, W - 40), randf_range(PLAY_TOP + 20, PLAY_BOTTOM - 20))
+			s.position = s.position.clamp(Vector2(40, PLAY_TOP + 20), Vector2(W - 40, PLAY_BOTTOM - 20))
 			s.scale = Vector2.ZERO
 			create_tween().tween_property(s, "scale", Vector2(1.4, 1.4), 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-			var tag := label("FREES KEYS", 8, Color(1, 0.8, 0.5), s)
-			tag.position = Vector2(-22, 8)
-			tag.scale = Vector2(0.72, 0.72)
-			pumpkins.append({"node": s, "life": 9.0})
+			var tag := label("GRAB! FREES KEYS" if first else "FREES KEYS", 8, Color(1, 0.8, 0.5), s)
+			tag.position = Vector2(-34 if first else -22, -21)
+			tag.scale = Vector2(1, 1) if first else Vector2(0.72, 0.72)
+			var ptr: Sprite2D = null
+			if first:
+				ptr = spr(28, 21, C_PUMPKIN, world, true)
+				ptr.z_index = 4
+				ptr.scale = Vector2(1.6, 1.6)
+			pumpkins.append({"node": s, "life": 12.0 if first else 9.0, "ptr": ptr})
 	for p in pumpkins.duplicate():
 		p.life -= dt
 		p.node.rotation = sin(t * 5) * 0.15
 		p.node.modulate = C_PUMPKIN.lightened(0.25 + 0.25 * sin(t * 8))
 		if p.life < 2.0:
 			p.node.visible = int(p.life * 10) % 2 == 0
-		if p.node.position.distance_to(witch.position) < 15:
+		var to_p: Vector2 = p.node.position - witch.position
+		if randf() < 0.35:  # sparkle: reads as "pick me up"
+			particles.append({"p": p.node.position + Vector2(randf_range(-11, 11), randf_range(-11, 11)), "v": Vector2(0, -25), "life": 0.5, "max": 0.5, "c": Color(1, 0.95, 0.6), "s": 1.5})
+		if to_p.length() < 55:  # gentle pull toward the witch
+			p.node.position = p.node.position.move_toward(witch.position, 50 * dt)
+		if p.ptr:
+			p.ptr.position = witch.position + to_p.normalized() * (26 + sin(t * 8) * 3)
+			p.ptr.rotation = to_p.angle() + PI / 2
+		if to_p.length() < 15:
 			pumpkins.erase(p)
+			if p.ptr:
+				p.ptr.queue_free()
 			play("exorcise")
 			burst(p.node.position, C_PUMPKIN, 26, 130)
 			popup("+3", p.node.position, C_PUMPKIN)
@@ -578,6 +614,8 @@ func _update_pumpkins(dt: float) -> void:
 			_refresh_hud()
 		elif p.life <= 0:
 			pumpkins.erase(p)
+			if p.ptr:
+				p.ptr.queue_free()
 			p.node.queue_free()
 
 
@@ -593,7 +631,8 @@ func _update_haunts(dt: float) -> void:
 	for k in 4:
 		if key_caps[k].haunt > 0:
 			active += 1
-	if haunt_timer <= 0 and active < _max_haunts():
+	var calm: bool = first_haunt_done or bats.all(func(b): return b.node.position.distance_to(witch.position) > 90)
+	if haunt_timer <= 0 and active < _max_haunts() and calm:
 		haunt_timer = lerp(9.0, 4.5, t / NIGHT_LEN)
 		var free_keys := []
 		for k in 4:
@@ -615,13 +654,22 @@ func _send_ghost(k: int) -> void:
 	var g := spr(27, 8, C_GHOST, hud)
 	g.z_index = 10
 	g.position = Vector2(randf_range(60, W - 60), -16)
-	g.scale = Vector2(1.6, 1.6)
+	var first := not first_haunt_done
+	g.scale = Vector2(2.2, 2.2) if first else Vector2(1.6, 1.6)
 	play("haunt", 1.0, -2)
 	var mid := Vector2(lerp(g.position.x, KEY_POS[k].x, 0.5) + randf_range(-80, 80), 120)
+	var d1 := 1.1 if first else 0.55
+	var d2 := 0.8 if first else 0.5
+	if first:
+		create_tween().tween_property(dim_play, "color:a", 0.5, 0.5)
+		create_tween().tween_method(func(_v: float):
+			if is_instance_valid(g):
+				particles.append({"p": g.position + Vector2(randf_range(-6, 6), randf_range(-6, 6)), "v": Vector2(0, 15), "life": 0.6, "max": 0.6, "c": C_GHOST, "s": 2.0}),
+			0.0, 1.0, d1 + d2)
 	var tw := create_tween()
-	tw.tween_property(g, "position", mid, 0.55).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-	tw.tween_property(g, "position", KEY_POS[k] + Vector2(14, -13), 0.5).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
-	tw.parallel().tween_property(g, "scale", Vector2.ONE, 0.5)
+	tw.tween_property(g, "position", mid, d1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tw.tween_property(g, "position", KEY_POS[k] + Vector2(14, -13), d2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+	tw.parallel().tween_property(g, "scale", Vector2.ONE, d2)
 	tw.tween_callback(func():
 		g.queue_free()
 		flying_ghosts -= 1
@@ -644,7 +692,11 @@ func _haunt(k: int) -> void:
 	kc.bar.visible = true
 	kc.base.modulate = C_HAUNT.darkened(0.15)
 	var tw := create_tween()
-	tw.tween_property(kc.icon, "rotation", DIR_ROT[nd] + TAU, 0.3).from(DIR_ROT[cur]).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	if first_haunt_done:
+		tw.tween_property(kc.icon, "rotation", DIR_ROT[nd] + TAU, 0.3).from(DIR_ROT[cur]).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	else:
+		tw.set_ignore_time_scale(true)
+		tw.tween_property(kc.icon, "rotation", DIR_ROT[nd], 0.9).from(DIR_ROT[cur]).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT).set_delay(0.3)
 	var tw2 := create_tween()
 	tw2.tween_property(kc.cap, "scale", Vector2(1.9, 1.9), 0.12).set_ease(Tween.EASE_OUT)
 	tw2.tween_property(kc.cap, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
@@ -660,7 +712,30 @@ func _haunt(k: int) -> void:
 	if not first_haunt_done:
 		first_haunt_done = true
 		pumpkin_timer = 1.5
-		hitstop(0.5, 0.25)  # teach: slow time the first time a key gets possessed
+		hitstop(1.4, 0.25)  # teach: slow time the first time a key gets possessed
+		create_tween().set_ignore_time_scale(true).tween_property(dim_play, "color:a", 0.0, 0.6).set_delay(2.2)
+		_teach_tip(k, nd)
+
+
+func _teach_tip(k: int, nd: int) -> void:
+	teach_tip = Node2D.new()
+	teach_tip.z_index = 11
+	teach_tip.scale = Vector2.ZERO
+	hud.add_child(teach_tip)
+	var l := label("%s key now flies" % KEY_NAMES[k], 8, Color(1, 1, 1), teach_tip)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	l.position = Vector2(-120, -8)
+	l.size = Vector2(130, 0)
+	var a := spr(28, 21, C_HAUNT.lightened(0.35), teach_tip, true)
+	a.rotation = DIR_ROT[nd]
+	a.position = Vector2(24, 0)
+	a.scale = Vector2(1.6, 1.6)
+	var tw := create_tween().set_ignore_time_scale(true)
+	tw.tween_property(teach_tip, "scale", Vector2.ONE, 0.4).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT).set_delay(0.5)
+	tw.tween_property(a, "scale", Vector2(2.2, 2.2), 0.12)
+	tw.tween_property(a, "scale", Vector2(1.6, 1.6), 0.3).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	tw.tween_property(teach_tip, "modulate:a", 0.0, 0.5).set_delay(3.2)
+	tw.tween_callback(teach_tip.queue_free)
 
 
 func _unhaunt(k: int, fx_on: bool) -> void:
@@ -682,7 +757,7 @@ func _update_caps(dt: float) -> void:
 	for k in 4:
 		var kc: Dictionary = key_caps[k]
 		var target := Vector2(0, 2) if key_down[k] else Vector2.ZERO
-		kc.base.position = kc.base.position.lerp(target, 30 * dt)
+		kc.base.position = kc.base.position.lerp(target, minf(30 * dt, 1.0))  # clamp: slow frames made caps fly off
 		kc.icon.position = kc.base.position
 		if kc.haunt > 0:
 			kc.ghost.position = Vector2(14, -13 + sin(t * 6 + k) * 2)
